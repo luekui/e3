@@ -507,7 +507,6 @@
   <!-- BOTTOM BAR -->
   <div id="bottom-bar">
     <button id="btn-manual">+ Manuell erfassen</button>
-    <button id="btn-export">CSV ↓</button>
   </div>
 </div>
 
@@ -542,7 +541,6 @@
   const modalOverlay = document.getElementById('modal-overlay');
   const timeInput    = document.getElementById('time-input');
   const btnManual    = document.getElementById('btn-manual');
-  const btnExport    = document.getElementById('btn-export');
   const btnCancel    = document.getElementById('btn-cancel');
   const btnConfirm   = document.getElementById('btn-confirm');
 
@@ -704,9 +702,7 @@
   });
 
   // ── Export ──
-  btnExport.addEventListener('click', () => {
-    window.open(`${SCRIPT_URL}?action=export`, '_blank');
-  });
+  // Export via sheets.google.com manuell
 
   // ── Toast ──
   let toastTimer;
