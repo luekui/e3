@@ -20,8 +20,8 @@
       --accent: #4fffb0;
       --accent-dim: rgba(79,255,176,0.12);
       --accent-glow: rgba(79,255,176,0.35);
-      --text: #e8eaf0;
-      --muted: #5a6075;
+      --text: #ffffff;
+      --muted: #8b95b0;
       --danger: #ff6b6b;
     }
 
@@ -70,9 +70,9 @@
     #stamp-area:active::before { opacity: 1; }
 
     #stamp-ring {
-      width: 160px;
-      height: 160px;
-      border-radius: 50%;
+      width: 220px;
+      height: 120px;
+      border-radius: 16px;
       border: 2px solid var(--border);
       display: flex;
       align-items: center;
@@ -88,9 +88,9 @@
     }
 
     #stamp-inner {
-      width: 130px;
-      height: 130px;
-      border-radius: 50%;
+      width: 196px;
+      height: 96px;
+      border-radius: 10px;
       background: var(--surface);
       border: 1px solid var(--border);
       display: flex;
@@ -126,7 +126,7 @@
       content: '';
       position: absolute;
       inset: -8px;
-      border-radius: 50%;
+      border-radius: 20px;
       border: 1px solid var(--accent);
       opacity: 0;
       animation: pulse-ring 3s ease-out infinite;
