@@ -1,0 +1,690 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#0f1117">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="E3">
+  <title>E3</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Syne:wght@700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0f1117;
+      --surface: #181c27;
+      --border: #252a38;
+      --accent: #4fffb0;
+      --accent-dim: rgba(79,255,176,0.12);
+      --accent-glow: rgba(79,255,176,0.35);
+      --text: #e8eaf0;
+      --muted: #5a6075;
+      --danger: #ff6b6b;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+    html, body {
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'DM Mono', monospace;
+      overflow: hidden;
+      overscroll-behavior: none;
+    }
+
+    #app {
+      display: flex;
+      flex-direction: column;
+      height: 100dvh;
+      padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
+    }
+
+    /* ── STAMP BUTTON ── */
+    #stamp-area {
+      flex: 0 0 46%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      position: relative;
+      cursor: pointer;
+      user-select: none;
+      border-bottom: 1px solid var(--border);
+    }
+
+    #stamp-area::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(ellipse at 50% 60%, var(--accent-dim) 0%, transparent 70%);
+      pointer-events: none;
+      transition: opacity 0.3s;
+      opacity: 0;
+    }
+
+    #stamp-area:active::before { opacity: 1; }
+
+    #stamp-ring {
+      width: 160px;
+      height: 160px;
+      border-radius: 50%;
+      border: 2px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      transition: border-color 0.2s, box-shadow 0.2s, transform 0.15s;
+    }
+
+    #stamp-area:active #stamp-ring {
+      border-color: var(--accent);
+      box-shadow: 0 0 40px var(--accent-glow), inset 0 0 30px var(--accent-dim);
+      transform: scale(0.94);
+    }
+
+    #stamp-inner {
+      width: 130px;
+      height: 130px;
+      border-radius: 50%;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 2px;
+      transition: background 0.2s;
+    }
+
+    #stamp-area:active #stamp-inner {
+      background: var(--accent-dim);
+    }
+
+    #live-time {
+      font-family: 'Syne', sans-serif;
+      font-size: 22px;
+      font-weight: 800;
+      color: var(--accent);
+      letter-spacing: 1px;
+    }
+
+    #stamp-label {
+      font-size: 9px;
+      letter-spacing: 3px;
+      color: var(--muted);
+      text-transform: uppercase;
+      margin-top: 2px;
+    }
+
+    /* pulse ring animation */
+    #stamp-ring::after {
+      content: '';
+      position: absolute;
+      inset: -8px;
+      border-radius: 50%;
+      border: 1px solid var(--accent);
+      opacity: 0;
+      animation: pulse-ring 3s ease-out infinite;
+    }
+
+    @keyframes pulse-ring {
+      0%   { transform: scale(0.92); opacity: 0.4; }
+      60%  { transform: scale(1.08); opacity: 0; }
+      100% { opacity: 0; }
+    }
+
+    /* stamp flash */
+    #flash {
+      position: fixed;
+      inset: 0;
+      background: var(--accent);
+      opacity: 0;
+      pointer-events: none;
+      z-index: 100;
+    }
+
+    #flash.go {
+      animation: flash 0.35s ease-out forwards;
+    }
+
+    @keyframes flash {
+      0%   { opacity: 0.18; }
+      100% { opacity: 0; }
+    }
+
+    /* ── STEMPELUNGEN LIST ── */
+    #list-area {
+      flex: 1 1 0;
+      overflow-y: auto;
+      padding: 16px 20px 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    #list-area::-webkit-scrollbar { width: 3px; }
+    #list-area::-webkit-scrollbar-track { background: transparent; }
+    #list-area::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+    #list-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 4px;
+    }
+
+    #list-date {
+      font-size: 10px;
+      letter-spacing: 3px;
+      color: var(--muted);
+      text-transform: uppercase;
+    }
+
+    #sync-status {
+      font-size: 9px;
+      letter-spacing: 1px;
+      color: var(--muted);
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    #sync-dot {
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: var(--muted);
+      transition: background 0.3s;
+    }
+
+    #sync-dot.ok { background: var(--accent); }
+    #sync-dot.err { background: var(--danger); }
+    #sync-dot.syncing { animation: blink 0.6s infinite; }
+
+    @keyframes blink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.2; }
+    }
+
+    .stamp-entry {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 14px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      animation: slide-in 0.3s ease-out;
+    }
+
+    @keyframes slide-in {
+      from { opacity: 0; transform: translateY(8px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .stamp-num {
+      font-size: 10px;
+      color: var(--muted);
+      min-width: 16px;
+    }
+
+    .stamp-time {
+      font-family: 'Syne', sans-serif;
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--accent);
+      flex: 1;
+    }
+
+    .stamp-delete {
+      width: 24px;
+      height: 24px;
+      border: none;
+      background: none;
+      color: var(--muted);
+      font-size: 16px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 4px;
+      transition: color 0.2s, background 0.2s;
+      padding: 0;
+    }
+
+    .stamp-delete:active {
+      color: var(--danger);
+      background: rgba(255,107,107,0.1);
+    }
+
+    #empty-msg {
+      text-align: center;
+      color: var(--muted);
+      font-size: 11px;
+      letter-spacing: 2px;
+      margin-top: 24px;
+    }
+
+    /* ── BOTTOM BAR ── */
+    #bottom-bar {
+      flex: 0 0 auto;
+      padding: 10px 20px 16px;
+      display: flex;
+      gap: 10px;
+      border-top: 1px solid var(--border);
+    }
+
+    #btn-manual {
+      flex: 1;
+      padding: 12px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      font-family: 'DM Mono', monospace;
+      font-size: 11px;
+      letter-spacing: 2px;
+      cursor: pointer;
+      transition: border-color 0.2s, background 0.2s;
+    }
+
+    #btn-manual:active {
+      border-color: var(--accent);
+      background: var(--accent-dim);
+    }
+
+    #btn-export {
+      padding: 12px 16px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--muted);
+      font-family: 'DM Mono', monospace;
+      font-size: 11px;
+      letter-spacing: 1px;
+      cursor: pointer;
+      transition: border-color 0.2s, color 0.2s;
+    }
+
+    #btn-export:active {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    /* ── MANUAL MODAL ── */
+    #modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(10,12,18,0.85);
+      display: flex;
+      align-items: flex-end;
+      z-index: 200;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.25s;
+    }
+
+    #modal-overlay.open {
+      opacity: 1;
+      pointer-events: all;
+    }
+
+    #modal {
+      width: 100%;
+      background: var(--surface);
+      border-top: 1px solid var(--border);
+      border-radius: 16px 16px 0 0;
+      padding: 24px 24px 32px;
+      transform: translateY(100%);
+      transition: transform 0.3s cubic-bezier(0.32, 0.72, 0, 1);
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    #modal-overlay.open #modal {
+      transform: translateY(0);
+    }
+
+    #modal-title {
+      font-family: 'Syne', sans-serif;
+      font-size: 14px;
+      font-weight: 700;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    #time-input {
+      width: 100%;
+      padding: 16px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--accent);
+      font-family: 'Syne', sans-serif;
+      font-size: 28px;
+      font-weight: 700;
+      text-align: center;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    #time-input:focus { border-color: var(--accent); }
+
+    #modal-actions {
+      display: flex;
+      gap: 10px;
+    }
+
+    #btn-cancel {
+      flex: 1;
+      padding: 14px;
+      background: transparent;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--muted);
+      font-family: 'DM Mono', monospace;
+      font-size: 11px;
+      letter-spacing: 2px;
+      cursor: pointer;
+    }
+
+    #btn-confirm {
+      flex: 2;
+      padding: 14px;
+      background: var(--accent);
+      border: none;
+      border-radius: 8px;
+      color: #0f1117;
+      font-family: 'DM Mono', monospace;
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 2px;
+      cursor: pointer;
+      transition: opacity 0.2s;
+    }
+
+    #btn-confirm:active { opacity: 0.8; }
+
+    /* toast */
+    #toast {
+      position: fixed;
+      bottom: 100px;
+      left: 50%;
+      transform: translateX(-50%) translateY(20px);
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 18px;
+      font-size: 11px;
+      letter-spacing: 1px;
+      color: var(--muted);
+      opacity: 0;
+      transition: opacity 0.3s, transform 0.3s;
+      white-space: nowrap;
+      z-index: 300;
+    }
+
+    #toast.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+  </style>
+</head>
+<body>
+
+<div id="flash"></div>
+<div id="toast"></div>
+
+<div id="app">
+  <!-- STAMP BUTTON -->
+  <div id="stamp-area" role="button" aria-label="Jetzt stempeln">
+    <div id="stamp-ring">
+      <div id="stamp-inner">
+        <div id="live-time">--:--:--</div>
+        <div id="stamp-label">Tippen zum Stempeln</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- LIST -->
+  <div id="list-area">
+    <div id="list-header">
+      <div id="list-date">Heute</div>
+      <div id="sync-status">
+        <div id="sync-dot"></div>
+        <span id="sync-text">—</span>
+      </div>
+    </div>
+    <div id="empty-msg">Noch keine Stempelungen</div>
+  </div>
+
+  <!-- BOTTOM BAR -->
+  <div id="bottom-bar">
+    <button id="btn-manual">+ Manuell erfassen</button>
+    <button id="btn-export">CSV ↓</button>
+  </div>
+</div>
+
+<!-- MANUAL MODAL -->
+<div id="modal-overlay">
+  <div id="modal">
+    <div id="modal-title">Manuelle Eingabe</div>
+    <input type="time" id="time-input" step="60">
+    <div id="modal-actions">
+      <button id="btn-cancel">Abbrechen</button>
+      <button id="btn-confirm">Speichern</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxUlX7V70TlrbLqLX1f2zd_BMMckO7_meiAMdD152k4ztzxNFPOD2ilfE9tDBgeGdqT/exec";
+
+  // ── State ──
+  let stamps = []; // array of "HH:MM:SS" strings
+
+  // ── DOM refs ──
+  const liveTimeEl   = document.getElementById('live-time');
+  const listArea     = document.getElementById('list-area');
+  const listDate     = document.getElementById('list-date');
+  const emptyMsg     = document.getElementById('empty-msg');
+  const syncDot      = document.getElementById('sync-dot');
+  const syncText     = document.getElementById('sync-text');
+  const stampArea    = document.getElementById('stamp-area');
+  const flash        = document.getElementById('flash');
+  const toast        = document.getElementById('toast');
+  const modalOverlay = document.getElementById('modal-overlay');
+  const timeInput    = document.getElementById('time-input');
+  const btnManual    = document.getElementById('btn-manual');
+  const btnExport    = document.getElementById('btn-export');
+  const btnCancel    = document.getElementById('btn-cancel');
+  const btnConfirm   = document.getElementById('btn-confirm');
+
+  // ── Live clock ──
+  function tick() {
+    const now = new Date();
+    liveTimeEl.textContent = now.toTimeString().slice(0, 8);
+  }
+  tick();
+  setInterval(tick, 500);
+
+  // Update date label
+  function updateDateLabel() {
+    const now = new Date();
+    const days = ['Sonntag','Montag','Dienstag','Mittwoch','Donnerstag','Freitag','Samstag'];
+    listDate.textContent = days[now.getDay()] + ', ' + now.toLocaleDateString('de-CH');
+  }
+  updateDateLabel();
+
+  // ── Sync status ──
+  function setSyncStatus(state, text) {
+    syncDot.className = '';
+    if (state) syncDot.classList.add(state);
+    syncText.textContent = text;
+  }
+
+  // ── Render list ──
+  function renderList() {
+    // Remove old entries (keep header)
+    document.querySelectorAll('.stamp-entry').forEach(e => e.remove());
+    if (emptyMsg) emptyMsg.remove();
+
+    if (stamps.length === 0) {
+      const msg = document.createElement('div');
+      msg.id = 'empty-msg';
+      msg.textContent = 'Noch keine Stempelungen';
+      listArea.appendChild(msg);
+      return;
+    }
+
+    stamps.forEach((t, i) => {
+      const entry = document.createElement('div');
+      entry.className = 'stamp-entry';
+      entry.innerHTML = `
+        <span class="stamp-num">${String(i + 1).padStart(2, '0')}</span>
+        <span class="stamp-time">${t}</span>
+        <button class="stamp-delete" data-index="${i}" aria-label="Löschen">×</button>
+      `;
+      listArea.appendChild(entry);
+    });
+
+    // scroll to bottom
+    listArea.scrollTop = listArea.scrollHeight;
+  }
+
+  // ── Load today from Sheet ──
+  async function loadToday() {
+    setSyncStatus('syncing', 'Laden…');
+    try {
+      const res = await fetch(`${SCRIPT_URL}?action=today`);
+      const data = await res.json();
+      if (data.stamps) {
+        stamps = data.stamps.split(';').filter(Boolean);
+      } else {
+        stamps = [];
+      }
+      renderList();
+      setSyncStatus('ok', 'Synchronisiert');
+    } catch (e) {
+      setSyncStatus('err', 'Offline');
+      showToast('Konnte nicht laden – offline?');
+    }
+  }
+
+  // ── Send stamp to Sheet ──
+  async function sendStamp(timeStr) {
+    setSyncStatus('syncing', 'Speichern…');
+    try {
+      await fetch(SCRIPT_URL, {
+        method: 'POST',
+        body: JSON.stringify({ time: timeStr }),
+        headers: { 'Content-Type': 'text/plain' } // avoid CORS preflight
+      });
+      setSyncStatus('ok', 'Gespeichert');
+    } catch (e) {
+      setSyncStatus('err', 'Fehler beim Speichern');
+      showToast('Fehler – Stempelung lokal gespeichert');
+    }
+  }
+
+  // ── Stamp action ──
+  function doStamp(timeStr) {
+    stamps.push(timeStr);
+    stamps.sort();
+    renderList();
+    flashScreen();
+    sendStamp(timeStr);
+  }
+
+  stampArea.addEventListener('click', () => {
+    const now = new Date();
+    const t = now.toTimeString().slice(0, 8);
+    doStamp(t);
+  });
+
+  // ── Flash ──
+  function flashScreen() {
+    flash.classList.remove('go');
+    void flash.offsetWidth;
+    flash.classList.add('go');
+  }
+
+  // ── Delete stamp ──
+  listArea.addEventListener('click', async (e) => {
+    const btn = e.target.closest('.stamp-delete');
+    if (!btn) return;
+    const idx = parseInt(btn.dataset.index);
+    stamps.splice(idx, 1);
+    renderList();
+    // Re-save the full day
+    await reSaveDay();
+  });
+
+  async function reSaveDay() {
+    // We overwrite the day by deleting and re-writing
+    // Apps Script doesn't have a delete endpoint, so we call a special action
+    setSyncStatus('syncing', 'Aktualisieren…');
+    try {
+      await fetch(SCRIPT_URL, {
+        method: 'POST',
+        body: JSON.stringify({ time: '__REPLACE__', stamps: stamps.join(';') }),
+        headers: { 'Content-Type': 'text/plain' }
+      });
+      setSyncStatus('ok', 'Gespeichert');
+    } catch (e) {
+      setSyncStatus('err', 'Sync-Fehler');
+    }
+  }
+
+  // ── Manual modal ──
+  btnManual.addEventListener('click', () => {
+    const now = new Date();
+    timeInput.value = now.toTimeString().slice(0,5);
+    modalOverlay.classList.add('open');
+    setTimeout(() => timeInput.focus(), 350);
+  });
+
+  btnCancel.addEventListener('click', () => modalOverlay.classList.remove('open'));
+  modalOverlay.addEventListener('click', (e) => {
+    if (e.target === modalOverlay) modalOverlay.classList.remove('open');
+  });
+
+  btnConfirm.addEventListener('click', () => {
+    const val = timeInput.value;
+    if (!val) return;
+    const timeStr = val + ':00';
+    modalOverlay.classList.remove('open');
+    doStamp(timeStr);
+  });
+
+  // ── Export ──
+  btnExport.addEventListener('click', () => {
+    window.open(`${SCRIPT_URL}?action=export`, '_blank');
+  });
+
+  // ── Toast ──
+  let toastTimer;
+  function showToast(msg) {
+    toast.textContent = msg;
+    toast.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => toast.classList.remove('show'), 3000);
+  }
+
+  // ── Service Worker ──
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/e3/sw.js', {scope: '/e3/'}).catch(err => console.log('SW error:', err));
+  }
+
+  // ── Init ──
+  loadToday();
+</script>
+</body>
+</html>
