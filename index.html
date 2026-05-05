@@ -716,11 +716,15 @@
   // ── Service Worker + Update Detection ──
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/e3/sw.js', {scope: '/e3/'}).then(reg => {
+
+      // Sofort prüfen + alle 60 Sekunden
+      reg.update();
+      setInterval(() => reg.update(), 60000);
+
       reg.addEventListener('updatefound', () => {
         const newWorker = reg.installing;
         newWorker.addEventListener('statechange', () => {
           if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-            // Neue Version ist bereit → Banner zeigen
             document.getElementById('update-banner').classList.add('show');
           }
         });
