@@ -680,7 +680,7 @@
 
   // ── Service Worker ──
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('./sw.js').catch(err => console.log('SW error:', err));
+    navigator.serviceWorker.register('/e3/sw.js', {scope: '/e3/'}).catch(err => console.log('SW error:', err));
   }
 
   // ── Init ──
