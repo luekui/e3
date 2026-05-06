@@ -1,11 +1,24 @@
+const CACHE = 'e3-v3';
+
 self.addEventListener('install', e => {
-  // Nicht automatisch skipWaiting – warten bis User auf "Aktualisieren" klickt
+  // Warten bis User auf "Aktualisieren" klickt
 });
 
-self.addEventListener('activate', e => clients.claim());
+self.addEventListener('activate', e => {
+  // Alte Caches löschen
+  e.waitUntil(
+    caches.keys().then(keys =>
+      Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))
+    )
+  );
+  clients.claim();
+});
 
 self.addEventListener('fetch', e => {
-  e.respondWith(fetch(e.request).catch(() => caches.match(e.request)));
+  // Network-first: immer frisch laden, Cache nur als Fallback
+  e.respondWith(
+    fetch(e.request).catch(() => caches.match(e.request))
+  );
 });
 
 self.addEventListener('message', e => {
