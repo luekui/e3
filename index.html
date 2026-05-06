@@ -776,7 +776,15 @@
     const val = timeInput.value;
     if (!val) return;
     modalOverlay.classList.remove('open');
-    doStamp(val + ':00');
+    const timeStr = val + ':00';
+    // Manuell: immer auf den aktuell angezeigten Tag
+    const dateStr = allDays[currentIdx].date;
+    allDays[currentIdx].stamps.push(timeStr);
+    allDays[currentIdx].stamps.sort();
+    stamps = allDays[currentIdx].stamps;
+    renderList();
+    flashScreen();
+    reSaveDay(dateStr, stamps);
   });
 
   // ── Toast ──
