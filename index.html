@@ -788,29 +788,56 @@
     toastTimer = setTimeout(() => toast.classList.remove('show'), 3000);
   }
 
-  // ── Service Worker ──
+  // ── Service Worker (Jubilaea-Muster) ──
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('/e3/sw.js', {scope:'/e3/'}).then(reg => {
-      reg.update();
-      setInterval(() => reg.update(), 60000);
-      reg.addEventListener('updatefound', () => {
-        const nw = reg.installing;
-        nw.addEventListener('statechange', () => {
-          if (nw.state === 'installed' && navigator.serviceWorker.controller) {
-            document.getElementById('update-banner').classList.add('show');
-          }
-        });
-      });
-    }).catch(err => console.log('SW:', err));
+    window.addEventListener('load', function() {
+      navigator.serviceWorker.register('/e3/sw.js?v=1.2', {scope:'/e3/'}).then(function(reg) {
 
-    document.getElementById('btn-update').addEventListener('click', () => {
-      navigator.serviceWorker.getRegistration().then(reg => {
-        if (reg && reg.waiting) reg.waiting.postMessage({type:'SKIP_WAITING'});
-        window.location.reload();
+        reg.update();
+
+        // Neuer SW während dieser Session
+        reg.addEventListener('updatefound', function() {
+          var nw = reg.installing;
+          nw.addEventListener('statechange', function() {
+            if (nw.state === 'installed' && navigator.serviceWorker.controller) {
+              showUpdateBanner(nw);
+            }
+          });
+        });
+
+        // SW wartet bereits beim App-Start (häufigster Fall!)
+        if (reg.waiting) {
+          showUpdateBanner(reg.waiting);
+        }
+
+        // Nochmals nach 2s prüfen
+        setTimeout(function() {
+          reg.update().then(function() {
+            if (reg.waiting) showUpdateBanner(reg.waiting);
+          });
+        }, 2000);
+
+      }).catch(function(err) { console.log('SW:', err); });
+
+      var reloading = false;
+      navigator.serviceWorker.addEventListener('controllerchange', function() {
+        if (!reloading) { reloading = true; window.location.reload(); }
       });
     });
-    navigator.serviceWorker.addEventListener('controllerchange', () => window.location.reload());
   }
+
+  function showUpdateBanner(worker) {
+    document.getElementById('update-banner').classList.add('show');
+    window._pendingWorker = worker;
+  }
+
+  document.getElementById('btn-update').addEventListener('click', function() {
+    if (window._pendingWorker) {
+      window._pendingWorker.postMessage({type: 'SKIP_WAITING'});
+    } else {
+      window.location.reload(true);
+    }
+  });
 
   // ── Init ──
   loadAll();
