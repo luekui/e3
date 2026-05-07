@@ -267,45 +267,59 @@
     .pair-row {
       display: flex;
       align-items: center;
-      gap: 10px;
-      padding: 10px 14px;
+      gap: 6px;
+      padding: 10px 12px;
     }
-    .pair-row + .pair-row { border-top: 1px solid var(--border); }
+    .pair-side {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex: 1;
+    }
+    .pair-side.right {
+      flex-direction: row-reverse;
+    }
+    .pair-arrow {
+      color: var(--border);
+      font-size: 14px;
+      flex-shrink: 0;
+    }
     .pair-label {
       font-size: 8px;
       letter-spacing: 2px;
       text-transform: uppercase;
-      min-width: 28px;
+      flex-shrink: 0;
     }
     .pair-label.in   { color: var(--accent); }
     .pair-label.out  { color: var(--orange); }
     .pair-label.open { color: var(--muted); }
     .pair-time {
       font-family: 'Syne', sans-serif;
-      font-size: 18px;
+      font-size: 17px;
       font-weight: 700;
-      flex: 1;
     }
     .pair-time.in   { color: var(--accent); }
     .pair-time.out  { color: var(--orange); }
-    .pair-time.open { color: var(--muted); font-size: 13px; letter-spacing: 1px; font-family: 'DM Mono', monospace; font-weight: 300; }
+    .pair-time.open { color: var(--muted); font-size: 13px; font-family: 'DM Mono', monospace; font-weight: 300; }
     .pair-delete {
-      width: 24px; height: 24px;
+      width: 22px; height: 22px;
       border: none; background: none;
       color: var(--muted);
-      font-size: 16px;
+      font-size: 15px;
       cursor: pointer;
       display: flex; align-items: center; justify-content: center;
       border-radius: 4px;
       transition: color 0.2s, background 0.2s;
-      padding: 0;
+      padding: 0; flex-shrink: 0;
     }
     .pair-delete:active { color: var(--danger); background: rgba(255,107,107,0.1); }
-    .pair-duration {
-      padding: 4px 14px 8px;
+    .pair-duration-inline {
       font-size: 10px;
       letter-spacing: 1px;
       color: var(--muted);
+      flex-shrink: 0;
+      text-align: center;
+      white-space: nowrap;
     }
 
     #total-bar {
@@ -575,50 +589,84 @@
     let totalMin = 0;
 
     for (let i = 0; i < stamps.length; i += 2) {
-      const inT  = stamps[i];
-      const outT = stamps[i+1] || null;
+      const inT        = stamps[i];
+      const outT       = stamps[i+1] || null;
+      const inDisplay  = inT.slice(0,5);
+      const outDisplay = outT ? outT.slice(0,5) : null;
 
       const block = document.createElement('div');
       block.className = 'pair-block';
 
-      // IN row
-      block.innerHTML += `
-        <div class="pair-row">
-          <span class="pair-label in">IN</span>
-          <span class="pair-time in">${inT}</span>
-          <button class="pair-delete" data-index="${i}">×</button>
-        </div>`;
-
       if (outT) {
         const dur = timeDiffMin(inT, outT);
         totalMin += dur;
-        block.innerHTML += `
+        block.innerHTML = `
           <div class="pair-row">
-            <span class="pair-label out">OUT</span>
-            <span class="pair-time out">${outT}</span>
-            <button class="pair-delete" data-index="${i+1}">×</button>
-          </div>
-          <div class="pair-duration">⏱ ${fmtDuration(dur)}</div>`;
+            <div class="pair-side">
+              <span class="pair-label in">IN</span>
+              <span class="pair-time in">${inDisplay}</span>
+              <button class="pair-delete" data-index="${i}">×</button>
+            </div>
+            <div class="pair-duration-inline">⏱ ${fmtDuration(dur)}</div>
+            <div class="pair-side right">
+              <span class="pair-label out">OUT</span>
+              <span class="pair-time out">${outDisplay}</span>
+              <button class="pair-delete" data-index="${i+1}">×</button>
+            </div>
+          </div>`;
       } else {
-        block.innerHTML += `
+        block.innerHTML = `
           <div class="pair-row">
-            <span class="pair-label open">OUT</span>
-            <span class="pair-time open">läuft…</span>
-            <span style="width:24px"></span>
+            <div class="pair-side">
+              <span class="pair-label in">IN</span>
+              <span class="pair-time in">${inDisplay}</span>
+              <button class="pair-delete" data-index="${i}">×</button>
+            </div>
+            <div class="pair-arrow">→</div>
+            <div class="pair-side right">
+              <span class="pair-label open">OUT</span>
+            </div>
           </div>`;
       }
 
       listArea.appendChild(block);
     }
 
-    if (Math.floor(stamps.length / 2) > 0) {
+    // Offener Block: laufende Zeit dazurechnen
+    const hasOpenBlock = stamps.length % 2 !== 0;
+    if (hasOpenBlock) {
+      const lastIn = stamps[stamps.length - 1];
+      const nowStr = new Date().toTimeString().slice(0, 8);
+      totalMin += timeDiffMin(lastIn, nowStr);
+    }
+
+    if (stamps.length > 0) {
       const bar = document.createElement('div');
       bar.id = 'total-bar';
-      bar.innerHTML = `<span>TOTAL</span><span>${fmtDuration(totalMin)}</span>`;
+      bar.innerHTML = `<span>TOTAL${hasOpenBlock ? ' ▸' : ''}</span><span id="total-val">${fmtDuration(totalMin)}</span>`;
       listArea.appendChild(bar);
     }
 
     listArea.scrollTop = listArea.scrollHeight;
+
+    // Live-Update des Totals wenn offener Block
+    clearInterval(window._totalTimer);
+    if (hasOpenBlock) {
+      window._totalTimer = setInterval(() => {
+        const el = document.getElementById('total-val');
+        if (!el) { clearInterval(window._totalTimer); return; }
+        const lastIn = stamps[stamps.length - 1];
+        const nowStr = new Date().toTimeString().slice(0, 8);
+        const live = totalMin - timeDiffMin(lastIn, new Date().toTimeString().slice(0,8));
+        // Neuberechnung
+        let t = 0;
+        for (let i = 0; i < stamps.length - 1; i += 2) {
+          t += timeDiffMin(stamps[i], stamps[i+1]);
+        }
+        t += timeDiffMin(lastIn, new Date().toTimeString().slice(0, 8));
+        el.textContent = fmtDuration(t);
+      }, 30000); // alle 30 Sekunden
+    }
   }
 
   // ── Load all ──
@@ -755,7 +803,15 @@
     const val = timeInput.value;
     if (!val) return;
     modalOverlay.classList.remove('open');
-    doStamp(val + ':00');
+    const timeStr = val + ':00';
+    // Manuell: immer auf den aktuell angezeigten Tag
+    const dateStr = allDays[currentIdx].date;
+    allDays[currentIdx].stamps.push(timeStr);
+    allDays[currentIdx].stamps.sort();
+    stamps = allDays[currentIdx].stamps;
+    renderList();
+    flashScreen();
+    reSaveDay(dateStr, stamps);
   });
 
   // ── Toast ──
@@ -767,29 +823,56 @@
     toastTimer = setTimeout(() => toast.classList.remove('show'), 3000);
   }
 
-  // ── Service Worker ──
+  // ── Service Worker (Jubilaea-Muster) ──
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('/e3/sw.js', {scope:'/e3/'}).then(reg => {
-      reg.update();
-      setInterval(() => reg.update(), 60000);
-      reg.addEventListener('updatefound', () => {
-        const nw = reg.installing;
-        nw.addEventListener('statechange', () => {
-          if (nw.state === 'installed' && navigator.serviceWorker.controller) {
-            document.getElementById('update-banner').classList.add('show');
-          }
-        });
-      });
-    }).catch(err => console.log('SW:', err));
+    window.addEventListener('load', function() {
+      navigator.serviceWorker.register('./sw.js?v=1.6').then(function(reg) {
 
-    document.getElementById('btn-update').addEventListener('click', () => {
-      navigator.serviceWorker.getRegistration().then(reg => {
-        if (reg && reg.waiting) reg.waiting.postMessage({type:'SKIP_WAITING'});
-        window.location.reload();
+        reg.update();
+
+        // Neuer SW während dieser Session
+        reg.addEventListener('updatefound', function() {
+          var nw = reg.installing;
+          nw.addEventListener('statechange', function() {
+            if (nw.state === 'installed' && navigator.serviceWorker.controller) {
+              showUpdateBanner(nw);
+            }
+          });
+        });
+
+        // SW wartet bereits beim App-Start (häufigster Fall!)
+        if (reg.waiting) {
+          showUpdateBanner(reg.waiting);
+        }
+
+        // Nochmals nach 2s prüfen
+        setTimeout(function() {
+          reg.update().then(function() {
+            if (reg.waiting) showUpdateBanner(reg.waiting);
+          });
+        }, 2000);
+
+      }).catch(function(err) { console.log('SW:', err); });
+
+      var reloading = false;
+      navigator.serviceWorker.addEventListener('controllerchange', function() {
+        if (!reloading) { reloading = true; window.location.reload(); }
       });
     });
-    navigator.serviceWorker.addEventListener('controllerchange', () => window.location.reload());
   }
+
+  function showUpdateBanner(worker) {
+    document.getElementById('update-banner').classList.add('show');
+    window._pendingWorker = worker;
+  }
+
+  document.getElementById('btn-update').addEventListener('click', function() {
+    if (window._pendingWorker) {
+      window._pendingWorker.postMessage({type: 'SKIP_WAITING'});
+    } else {
+      window.location.reload(true);
+    }
+  });
 
   // ── Init ──
   loadAll();
