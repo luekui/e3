@@ -267,59 +267,45 @@
     .pair-row {
       display: flex;
       align-items: center;
-      gap: 6px;
-      padding: 10px 12px;
+      gap: 10px;
+      padding: 10px 14px;
     }
-    .pair-side {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      flex: 1;
-    }
-    .pair-side.right {
-      flex-direction: row-reverse;
-    }
-    .pair-arrow {
-      color: var(--border);
-      font-size: 14px;
-      flex-shrink: 0;
-    }
+    .pair-row + .pair-row { border-top: 1px solid var(--border); }
     .pair-label {
       font-size: 8px;
       letter-spacing: 2px;
       text-transform: uppercase;
-      flex-shrink: 0;
+      min-width: 28px;
     }
     .pair-label.in   { color: var(--accent); }
     .pair-label.out  { color: var(--orange); }
     .pair-label.open { color: var(--muted); }
     .pair-time {
       font-family: 'Syne', sans-serif;
-      font-size: 17px;
+      font-size: 18px;
       font-weight: 700;
+      flex: 1;
     }
     .pair-time.in   { color: var(--accent); }
     .pair-time.out  { color: var(--orange); }
-    .pair-time.open { color: var(--muted); font-size: 13px; font-family: 'DM Mono', monospace; font-weight: 300; }
+    .pair-time.open { color: var(--muted); font-size: 13px; letter-spacing: 1px; font-family: 'DM Mono', monospace; font-weight: 300; }
     .pair-delete {
-      width: 22px; height: 22px;
+      width: 24px; height: 24px;
       border: none; background: none;
       color: var(--muted);
-      font-size: 15px;
+      font-size: 16px;
       cursor: pointer;
       display: flex; align-items: center; justify-content: center;
       border-radius: 4px;
       transition: color 0.2s, background 0.2s;
-      padding: 0; flex-shrink: 0;
+      padding: 0;
     }
     .pair-delete:active { color: var(--danger); background: rgba(255,107,107,0.1); }
-    .pair-duration-inline {
+    .pair-duration {
+      padding: 4px 14px 8px;
       font-size: 10px;
       letter-spacing: 1px;
       color: var(--muted);
-      flex-shrink: 0;
-      text-align: center;
-      white-space: nowrap;
     }
 
     #total-bar {
@@ -589,43 +575,36 @@
     let totalMin = 0;
 
     for (let i = 0; i < stamps.length; i += 2) {
-      const inT        = stamps[i];
-      const outT       = stamps[i+1] || null;
-      const inDisplay  = inT.slice(0,5);
-      const outDisplay = outT ? outT.slice(0,5) : null;
+      const inT  = stamps[i];
+      const outT = stamps[i+1] || null;
 
       const block = document.createElement('div');
       block.className = 'pair-block';
 
+      // IN row
+      block.innerHTML += `
+        <div class="pair-row">
+          <span class="pair-label in">IN</span>
+          <span class="pair-time in">${inT}</span>
+          <button class="pair-delete" data-index="${i}">×</button>
+        </div>`;
+
       if (outT) {
         const dur = timeDiffMin(inT, outT);
         totalMin += dur;
-        block.innerHTML = `
+        block.innerHTML += `
           <div class="pair-row">
-            <div class="pair-side">
-              <span class="pair-label in">IN</span>
-              <span class="pair-time in">${inDisplay}</span>
-              <button class="pair-delete" data-index="${i}">×</button>
-            </div>
-            <div class="pair-duration-inline">⏱ ${fmtDuration(dur)}</div>
-            <div class="pair-side right">
-              <span class="pair-label out">OUT</span>
-              <span class="pair-time out">${outDisplay}</span>
-              <button class="pair-delete" data-index="${i+1}">×</button>
-            </div>
-          </div>`;
+            <span class="pair-label out">OUT</span>
+            <span class="pair-time out">${outT}</span>
+            <button class="pair-delete" data-index="${i+1}">×</button>
+          </div>
+          <div class="pair-duration">⏱ ${fmtDuration(dur)}</div>`;
       } else {
-        block.innerHTML = `
+        block.innerHTML += `
           <div class="pair-row">
-            <div class="pair-side">
-              <span class="pair-label in">IN</span>
-              <span class="pair-time in">${inDisplay}</span>
-              <button class="pair-delete" data-index="${i}">×</button>
-            </div>
-            <div class="pair-arrow">→</div>
-            <div class="pair-side right">
-              <span class="pair-label open">OUT</span>
-            </div>
+            <span class="pair-label open">OUT</span>
+            <span class="pair-time open">läuft…</span>
+            <span style="width:24px"></span>
           </div>`;
       }
 
@@ -776,15 +755,7 @@
     const val = timeInput.value;
     if (!val) return;
     modalOverlay.classList.remove('open');
-    const timeStr = val + ':00';
-    // Manuell: immer auf den aktuell angezeigten Tag
-    const dateStr = allDays[currentIdx].date;
-    allDays[currentIdx].stamps.push(timeStr);
-    allDays[currentIdx].stamps.sort();
-    stamps = allDays[currentIdx].stamps;
-    renderList();
-    flashScreen();
-    reSaveDay(dateStr, stamps);
+    doStamp(val + ':00');
   });
 
   // ── Toast ──
@@ -796,56 +767,29 @@
     toastTimer = setTimeout(() => toast.classList.remove('show'), 3000);
   }
 
-  // ── Service Worker (Jubilaea-Muster) ──
+  // ── Service Worker ──
   if ('serviceWorker' in navigator) {
-    window.addEventListener('load', function() {
-      navigator.serviceWorker.register('/e3/sw.js?v=1.4', {scope:'/e3/'}).then(function(reg) {
-
-        reg.update();
-
-        // Neuer SW während dieser Session
-        reg.addEventListener('updatefound', function() {
-          var nw = reg.installing;
-          nw.addEventListener('statechange', function() {
-            if (nw.state === 'installed' && navigator.serviceWorker.controller) {
-              showUpdateBanner(nw);
-            }
-          });
+    navigator.serviceWorker.register('/e3/sw.js', {scope:'/e3/'}).then(reg => {
+      reg.update();
+      setInterval(() => reg.update(), 60000);
+      reg.addEventListener('updatefound', () => {
+        const nw = reg.installing;
+        nw.addEventListener('statechange', () => {
+          if (nw.state === 'installed' && navigator.serviceWorker.controller) {
+            document.getElementById('update-banner').classList.add('show');
+          }
         });
+      });
+    }).catch(err => console.log('SW:', err));
 
-        // SW wartet bereits beim App-Start (häufigster Fall!)
-        if (reg.waiting) {
-          showUpdateBanner(reg.waiting);
-        }
-
-        // Nochmals nach 2s prüfen
-        setTimeout(function() {
-          reg.update().then(function() {
-            if (reg.waiting) showUpdateBanner(reg.waiting);
-          });
-        }, 2000);
-
-      }).catch(function(err) { console.log('SW:', err); });
-
-      var reloading = false;
-      navigator.serviceWorker.addEventListener('controllerchange', function() {
-        if (!reloading) { reloading = true; window.location.reload(); }
+    document.getElementById('btn-update').addEventListener('click', () => {
+      navigator.serviceWorker.getRegistration().then(reg => {
+        if (reg && reg.waiting) reg.waiting.postMessage({type:'SKIP_WAITING'});
+        window.location.reload();
       });
     });
+    navigator.serviceWorker.addEventListener('controllerchange', () => window.location.reload());
   }
-
-  function showUpdateBanner(worker) {
-    document.getElementById('update-banner').classList.add('show');
-    window._pendingWorker = worker;
-  }
-
-  document.getElementById('btn-update').addEventListener('click', function() {
-    if (window._pendingWorker) {
-      window._pendingWorker.postMessage({type: 'SKIP_WAITING'});
-    } else {
-      window.location.reload(true);
-    }
-  });
 
   // ── Init ──
   loadAll();
