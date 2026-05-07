@@ -131,8 +131,8 @@
       transition: border-color 0.2s, box-shadow 0.2s, transform 0.15s;
     }
     #stamp-area:active #stamp-ring {
-      border-color: var(--accent);
-      box-shadow: 0 0 40px var(--accent-glow), inset 0 0 30px var(--accent-dim);
+      border-color: var(--stamp-color, var(--accent));
+      box-shadow: 0 0 40px var(--stamp-glow, var(--accent-glow)), inset 0 0 30px var(--stamp-dim, var(--accent-dim));
       transform: scale(0.94);
     }
     #stamp-inner {
@@ -167,7 +167,7 @@
       position: absolute;
       inset: -8px;
       border-radius: 20px;
-      border: 1px solid var(--accent);
+      border: 1px solid var(--stamp-color, var(--accent));
       opacity: 0;
       animation: pulse-ring 3s ease-out infinite;
     }
@@ -504,7 +504,7 @@
 </div>
 
 <script>
-  const APP_VERSION = '1.7';
+  const APP_VERSION = '1.8';
 
   const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxUlX7V70TlrbLqLX1f2zd_BMMckO7_meiAMdD152k4ztzxNFPOD2ilfE9tDBgeGdqT/exec";
 
@@ -651,6 +651,9 @@
 
     listArea.scrollTop = listArea.scrollHeight;
 
+    // Farbe des Stempel-Buttons anpassen
+    updateStampColor();
+
     // Live-Update des Totals wenn offener Block
     clearInterval(window._totalTimer);
     if (hasOpenBlock) {
@@ -669,6 +672,19 @@
         el.textContent = fmtDuration(t);
       }, 30000); // alle 30 Sekunden
     }
+  }
+
+  // ── Stempel-Button Farbe ──
+  function updateStampColor() {
+    const isOut = stamps.length % 2 !== 0;
+    const color = isOut ? 'var(--orange)' : 'var(--accent)';
+    const glow  = isOut ? 'rgba(255,170,79,0.35)' : 'var(--accent-glow)';
+    const dim   = isOut ? 'rgba(255,170,79,0.12)' : 'var(--accent-dim)';
+    document.getElementById('live-time').style.color = color;
+    // Update CSS variables for pulse ring and glow
+    document.documentElement.style.setProperty('--stamp-color', color);
+    document.documentElement.style.setProperty('--stamp-glow', glow);
+    document.documentElement.style.setProperty('--stamp-dim', dim);
   }
 
   // ── Load all ──
@@ -828,7 +844,7 @@
   // ── Service Worker ──
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', function() {
-      navigator.serviceWorker.register('./sw.js?v=1.7').then(function(reg) {
+      navigator.serviceWorker.register('./sw.js?v=1.8').then(function(reg) {
         reg.update();
         reg.addEventListener('updatefound', function() {
           var nw = reg.installing;
