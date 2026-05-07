@@ -504,6 +504,8 @@
 </div>
 
 <script>
+  const APP_VERSION = '1.7';
+
   const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxUlX7V70TlrbLqLX1f2zd_BMMckO7_meiAMdD152k4ztzxNFPOD2ilfE9tDBgeGdqT/exec";
 
   let allDays    = [];  // [{date:"06.05.2026", stamps:["07:00:00",...]}, ...]
@@ -823,14 +825,11 @@
     toastTimer = setTimeout(() => toast.classList.remove('show'), 3000);
   }
 
-  // ── Service Worker (Jubilaea-Muster) ──
+  // ── Service Worker ──
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', function() {
-      navigator.serviceWorker.register('./sw.js?v=1.6').then(function(reg) {
-
+      navigator.serviceWorker.register('./sw.js?v=1.7').then(function(reg) {
         reg.update();
-
-        // Neuer SW während dieser Session
         reg.addEventListener('updatefound', function() {
           var nw = reg.installing;
           nw.addEventListener('statechange', function() {
@@ -839,21 +838,11 @@
             }
           });
         });
-
-        // SW wartet bereits beim App-Start (häufigster Fall!)
-        if (reg.waiting) {
-          showUpdateBanner(reg.waiting);
-        }
-
-        // Nochmals nach 2s prüfen
+        if (reg.waiting) showUpdateBanner(reg.waiting);
         setTimeout(function() {
-          reg.update().then(function() {
-            if (reg.waiting) showUpdateBanner(reg.waiting);
-          });
+          reg.update().then(function() { if (reg.waiting) showUpdateBanner(reg.waiting); });
         }, 2000);
-
       }).catch(function(err) { console.log('SW:', err); });
-
       var reloading = false;
       navigator.serviceWorker.addEventListener('controllerchange', function() {
         if (!reloading) { reloading = true; window.location.reload(); }
@@ -861,17 +850,29 @@
     });
   }
 
+  // ── Version-Check: beim Start prüfen ob neue Version auf Server ──
   function showUpdateBanner(worker) {
     document.getElementById('update-banner').classList.add('show');
     window._pendingWorker = worker;
   }
 
+  function checkVersion() {
+    fetch('./index.html?nocache=' + Date.now())
+      .then(function(r) { return r.text(); })
+      .then(function(html) {
+        var m = html.match(/APP_VERSION = '([^']+)'/);
+        if (m && m[1] !== APP_VERSION) {
+          document.getElementById('update-banner').classList.add('show');
+        }
+      }).catch(function(){});
+  }
+  setTimeout(checkVersion, 3000);
+
   document.getElementById('btn-update').addEventListener('click', function() {
     if (window._pendingWorker) {
       window._pendingWorker.postMessage({type: 'SKIP_WAITING'});
-    } else {
-      window.location.reload(true);
     }
+    setTimeout(function() { window.location.reload(true); }, 300);
   });
 
   // ── Init ──
