@@ -313,11 +313,13 @@
       padding: 0; flex-shrink: 0;
     }
     .pair-delete:active { color: var(--danger); background: rgba(255,107,107,0.1); }
-    .pair-duration {
-      padding: 0 12px 8px;
+    .pair-duration-inline {
       font-size: 10px;
       letter-spacing: 1px;
       color: var(--muted);
+      flex-shrink: 0;
+      text-align: center;
+      white-space: nowrap;
     }
 
     #total-bar {
@@ -605,14 +607,13 @@
               <span class="pair-time in">${inDisplay}</span>
               <button class="pair-delete" data-index="${i}">×</button>
             </div>
-            <div class="pair-arrow">→</div>
+            <div class="pair-duration-inline">⏱ ${fmtDuration(dur)}</div>
             <div class="pair-side right">
               <span class="pair-label out">OUT</span>
               <span class="pair-time out">${outDisplay}</span>
               <button class="pair-delete" data-index="${i+1}">×</button>
             </div>
-          </div>
-          <div class="pair-duration">⏱ ${fmtDuration(dur)}</div>`;
+          </div>`;
       } else {
         block.innerHTML = `
           <div class="pair-row">
@@ -624,7 +625,6 @@
             <div class="pair-arrow">→</div>
             <div class="pair-side right">
               <span class="pair-label open">OUT</span>
-              <span class="pair-time open">läuft…</span>
             </div>
           </div>`;
       }
@@ -799,7 +799,7 @@
   // ── Service Worker (Jubilaea-Muster) ──
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', function() {
-      navigator.serviceWorker.register('/e3/sw.js?v=1.3', {scope:'/e3/'}).then(function(reg) {
+      navigator.serviceWorker.register('/e3/sw.js?v=1.4', {scope:'/e3/'}).then(function(reg) {
 
         reg.update();
 
