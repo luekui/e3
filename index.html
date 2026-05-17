@@ -504,7 +504,7 @@
 </div>
 
 <script>
-  const APP_VERSION = '1.9';
+  const APP_VERSION = '2.0';
 
   const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxUlX7V70TlrbLqLX1f2zd_BMMckO7_meiAMdD152k4ztzxNFPOD2ilfE9tDBgeGdqT/exec";
   const LS_TODAY  = 'e3_today';   // { date, stamps }
@@ -718,25 +718,33 @@
   async function loadAll() {
     const today = todayStr();
 
-    // 1. Sofort aus Cache rendern
+    // Immer sicherstellen dass heute existiert
+    function ensureToday() {
+      let idx = allDays.findIndex(d => d.date === today);
+      if (idx < 0) { allDays.push({ date: today, stamps: [] }); idx = allDays.length - 1; }
+      currentIdx = idx;
+      stamps = allDays[currentIdx].stamps;
+    }
+
+    // 1. Sofort aus Cache rendern (0ms Wartezeit)
     const cachedDays = loadCacheDays();
     const cachedToday = loadCacheToday();
 
-    if (cachedDays.length > 0 || cachedToday) {
-      allDays = cachedDays.length > 0 ? cachedDays : [];
-      // Heute einfügen/aktualisieren
-      let idx = allDays.findIndex(d => d.date === today);
+    if (cachedDays.length > 0) {
+      allDays = cachedDays;
       if (cachedToday) {
-        if (idx < 0) { allDays.push({ date: today, stamps: cachedToday.stamps }); idx = allDays.length - 1; }
+        let idx = allDays.findIndex(d => d.date === today);
+        if (idx < 0) { allDays.push({ date: today, stamps: cachedToday.stamps }); }
         else allDays[idx].stamps = cachedToday.stamps;
-      } else if (idx < 0) {
-        allDays.push({ date: today, stamps: [] }); idx = allDays.length - 1;
       }
-      currentIdx = idx;
-      stamps = allDays[currentIdx].stamps;
-      renderList();
-      setSyncStatus('ok', 'Cache');
+    } else if (cachedToday) {
+      allDays = [{ date: today, stamps: cachedToday.stamps }];
     }
+
+    // Immer heute setzen und rendern
+    ensureToday();
+    renderList();
+    setSyncStatus(cachedDays.length > 0 ? 'ok' : 'syncing', cachedDays.length > 0 ? 'Cache' : 'Laden…');
 
     // 2. Offline-Queue leeren
     await flushQueue();
@@ -934,7 +942,7 @@
   // ── Service Worker ──
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', function() {
-      navigator.serviceWorker.register('./sw.js?v=1.9').then(function(reg) {
+      navigator.serviceWorker.register('./sw.js?v=2.0').then(function(reg) {
         reg.update();
         reg.addEventListener('updatefound', function() {
           var nw = reg.installing;
