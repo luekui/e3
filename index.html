@@ -504,13 +504,40 @@
 </div>
 
 <script>
-  const APP_VERSION = '1.8';
+  const APP_VERSION = '1.9';
 
   const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxUlX7V70TlrbLqLX1f2zd_BMMckO7_meiAMdD152k4ztzxNFPOD2ilfE9tDBgeGdqT/exec";
+  const LS_TODAY  = 'e3_today';   // { date, stamps }
+  const LS_DAYS   = 'e3_days';    // [ {date, stamps}, ... ]
+  const LS_QUEUE  = 'e3_queue';   // [ { action, time, date, stamps } ]
 
-  let allDays    = [];  // [{date:"06.05.2026", stamps:["07:00:00",...]}, ...]
+  let allDays    = [];
   let currentIdx = -1;
   let stamps     = [];
+
+  // ── Cache Helpers ──
+  function loadCacheToday() {
+    try {
+      const c = JSON.parse(localStorage.getItem(LS_TODAY));
+      if (c && c.date === todayStr()) return c;
+      return null;
+    } catch(e) { return null; }
+  }
+  function saveCacheToday(stampsArr) {
+    localStorage.setItem(LS_TODAY, JSON.stringify({ date: todayStr(), stamps: stampsArr }));
+  }
+  function loadCacheDays() {
+    try { return JSON.parse(localStorage.getItem(LS_DAYS) || '[]'); }
+    catch(e) { return []; }
+  }
+  function saveCacheDays(days) {
+    localStorage.setItem(LS_DAYS, JSON.stringify(days));
+  }
+  function loadQueue() {
+    try { return JSON.parse(localStorage.getItem(LS_QUEUE) || '[]'); }
+    catch(e) { return []; }
+  }
+  function saveQueue(q) { localStorage.setItem(LS_QUEUE, JSON.stringify(q)); }
 
   // ── Helpers ──
   function todayStr() {
@@ -687,28 +714,78 @@
     document.documentElement.style.setProperty('--stamp-dim', dim);
   }
 
-  // ── Load all ──
+  // ── Init (optimistisch) ──
   async function loadAll() {
-    setSyncStatus('syncing', 'Laden…');
-    try {
-      const res  = await fetch(`${SCRIPT_URL}?action=all`);
-      const data = await res.json();
-      allDays = data.days || [];
-      const today = todayStr();
+    const today = todayStr();
+
+    // 1. Sofort aus Cache rendern
+    const cachedDays = loadCacheDays();
+    const cachedToday = loadCacheToday();
+
+    if (cachedDays.length > 0 || cachedToday) {
+      allDays = cachedDays.length > 0 ? cachedDays : [];
+      // Heute einfügen/aktualisieren
       let idx = allDays.findIndex(d => d.date === today);
-      if (idx < 0) {
-        allDays.push({ date: today, stamps: [] });
-        idx = allDays.length - 1;
+      if (cachedToday) {
+        if (idx < 0) { allDays.push({ date: today, stamps: cachedToday.stamps }); idx = allDays.length - 1; }
+        else allDays[idx].stamps = cachedToday.stamps;
+      } else if (idx < 0) {
+        allDays.push({ date: today, stamps: [] }); idx = allDays.length - 1;
       }
       currentIdx = idx;
       stamps = allDays[currentIdx].stamps;
       renderList();
+      setSyncStatus('ok', 'Cache');
+    }
+
+    // 2. Offline-Queue leeren
+    await flushQueue();
+
+    // 3. Sheet im Hintergrund sync'en
+    await syncFromSheet();
+
+    // 4. Auto-sync alle 5 Minuten
+    setInterval(syncFromSheet, 5 * 60 * 1000);
+  }
+
+  async function syncFromSheet() {
+    setSyncStatus('syncing', 'Sync…');
+    try {
+      const res  = await fetch(`${SCRIPT_URL}?action=all`);
+      const data = await res.json();
+      const today = todayStr();
+      allDays = data.days || [];
+      let idx = allDays.findIndex(d => d.date === today);
+      if (idx < 0) { allDays.push({ date: today, stamps: [] }); idx = allDays.length - 1; }
+      // Cache aktualisieren
+      saveCacheDays(allDays);
+      saveCacheToday(allDays[idx].stamps);
+      // Nur heute neu rendern wenn gerade auf heute
+      if (currentIdx === idx || currentIdx === -1) {
+        currentIdx = idx;
+        stamps = allDays[currentIdx].stamps;
+        renderList();
+      }
       setSyncStatus('ok', 'Synchronisiert');
       checkWarn();
     } catch(e) {
       setSyncStatus('err', 'Offline');
-      showToast('Konnte nicht laden – offline?');
     }
+  }
+
+  async function flushQueue() {
+    const q = loadQueue();
+    if (q.length === 0) return;
+    try {
+      for (const op of q) {
+        if (op.action === 'stamp') {
+          await fetch(SCRIPT_URL, { method: 'POST', body: JSON.stringify({ time: op.time }), headers: { 'Content-Type': 'text/plain' } });
+        } else if (op.action === 'replace') {
+          await fetch(SCRIPT_URL, { method: 'POST', body: JSON.stringify({ time: '__REPLACE__', date: op.date, stamps: op.stamps }), headers: { 'Content-Type': 'text/plain' } });
+        }
+      }
+      saveQueue([]);
+    } catch(e) { /* noch offline – Queue behalten */ }
   }
 
   // ── Warn: last past day odd count ──
@@ -752,8 +829,12 @@
     allDays[idx].stamps.sort();
     currentIdx = idx;
     stamps = allDays[currentIdx].stamps;
+    // Sofort cachen
+    saveCacheToday(stamps);
+    saveCacheDays(allDays);
     renderList();
     flashScreen();
+    setSyncStatus('ok', 'Gespeichert');
     sendStamp(timeStr);
   }
 
@@ -769,31 +850,32 @@
 
   // ── Send / Save ──
   async function sendStamp(timeStr) {
-    setSyncStatus('syncing', 'Speichern…');
     try {
       await fetch(SCRIPT_URL, {
         method: 'POST',
         body: JSON.stringify({ time: timeStr }),
         headers: { 'Content-Type': 'text/plain' }
       });
-      setSyncStatus('ok', 'Gespeichert');
     } catch(e) {
-      setSyncStatus('err', 'Fehler');
-      showToast('Fehler beim Speichern');
+      // Offline: in Queue
+      const q = loadQueue();
+      q.push({ action: 'stamp', time: timeStr });
+      saveQueue(q);
+      showToast('Offline – wird sync't beim nächsten Start');
     }
   }
 
   async function reSaveDay(dateStr, stampsArr) {
-    setSyncStatus('syncing', 'Aktualisieren…');
     try {
       await fetch(SCRIPT_URL, {
         method: 'POST',
         body: JSON.stringify({ time: '__REPLACE__', date: dateStr, stamps: stampsArr.join(';') }),
         headers: { 'Content-Type': 'text/plain' }
       });
-      setSyncStatus('ok', 'Gespeichert');
     } catch(e) {
-      setSyncStatus('err', 'Sync-Fehler');
+      const q = loadQueue();
+      q.push({ action: 'replace', date: dateStr, stamps: stampsArr.join(';') });
+      saveQueue(q);
     }
   }
 
@@ -805,7 +887,11 @@
     const dateStr = allDays[currentIdx].date;
     allDays[currentIdx].stamps.splice(idx, 1);
     stamps = allDays[currentIdx].stamps;
+    // Sofort cachen
+    if (dateStr === todayStr()) saveCacheToday(stamps);
+    saveCacheDays(allDays);
     renderList();
+    setSyncStatus('ok', 'Gespeichert');
     await reSaveDay(dateStr, stamps);
   });
 
@@ -827,8 +913,12 @@
     allDays[currentIdx].stamps.push(timeStr);
     allDays[currentIdx].stamps.sort();
     stamps = allDays[currentIdx].stamps;
+    // Sofort cachen
+    if (dateStr === todayStr()) saveCacheToday(stamps);
+    saveCacheDays(allDays);
     renderList();
     flashScreen();
+    setSyncStatus('ok', 'Gespeichert');
     reSaveDay(dateStr, stamps);
   });
 
@@ -844,7 +934,7 @@
   // ── Service Worker ──
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', function() {
-      navigator.serviceWorker.register('./sw.js?v=1.8').then(function(reg) {
+      navigator.serviceWorker.register('./sw.js?v=1.9').then(function(reg) {
         reg.update();
         reg.addEventListener('updatefound', function() {
           var nw = reg.installing;
