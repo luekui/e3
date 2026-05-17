@@ -1,4 +1,4 @@
-const CACHE = "e3-v5";
+const CACHE = "e3-v6";
 const ASSETS = [
   "./index.html",
   "./manifest.json",
