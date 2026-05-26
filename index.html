@@ -504,16 +504,37 @@
 </div>
 
 <script>
-  const APP_VERSION = '2.2';
+  const APP_VERSION = '2.3';
 
   const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxUlX7V70TlrbLqLX1f2zd_BMMckO7_meiAMdD152k4ztzxNFPOD2ilfE9tDBgeGdqT/exec";
-  const LS_TODAY  = 'e3_today';   // { date, stamps }
-  const LS_DAYS   = 'e3_days';    // [ {date, stamps}, ... ]
-  const LS_QUEUE  = 'e3_queue';   // [ { action, time, date, stamps } ]
+  const LS_TODAY   = 'e3_today';    // { date, stamps }
+  const LS_DAYS    = 'e3_days';     // [ {date, stamps}, ... ]
+  const LS_QUEUE   = 'e3_queue';    // [ { action, time, date, stamps } ]  (Offline-Queue)
+  const LS_PENDING = 'e3_pending';  // [ { id, action, date, time?, stamps? } ]  (in-flight Ops)
 
   let allDays    = [];
   let currentIdx = -1;
   let stamps     = [];
+
+  // ── Pending Operations Tracking ──
+  // Ops, die lokal angewendet, aber noch nicht vom Server bestätigt wurden.
+  // Wird benutzt um zu verhindern, dass ein laufender Sync sie überschreibt.
+  let pendingOps = [];
+  function loadPending() {
+    try { return JSON.parse(localStorage.getItem(LS_PENDING) || '[]'); }
+    catch(e) { return []; }
+  }
+  function savePending() { localStorage.setItem(LS_PENDING, JSON.stringify(pendingOps)); }
+  function addPending(op) {
+    op.id = Date.now() + '-' + Math.random().toString(36).slice(2, 8);
+    pendingOps.push(op);
+    savePending();
+    return op.id;
+  }
+  function removePending(id) {
+    pendingOps = pendingOps.filter(p => p.id !== id);
+    savePending();
+  }
 
   // ── Cache Helpers ──
   function loadCacheToday() {
@@ -718,6 +739,9 @@
   async function loadAll() {
     const today = todayStr();
 
+    // 0. Pending-Ops vom letzten Lauf wiederherstellen (z.B. nach App-Crash)
+    pendingOps = loadPending();
+
     // Immer sicherstellen dass heute existiert
     function ensureToday() {
       let idx = allDays.findIndex(d => d.date === today);
@@ -756,25 +780,59 @@
     setInterval(syncFromSheet, 5 * 60 * 1000);
   }
 
+  // Wendet alle pendingOps auf das frisch vom Server geholte allDays an.
+  // So gehen lokale Änderungen, die noch nicht bestätigt wurden, nicht verloren.
+  function applyPendingOps(serverDays) {
+    if (pendingOps.length === 0) return serverDays;
+    const days = serverDays.slice();
+    for (const op of pendingOps) {
+      let idx = days.findIndex(d => d.date === op.date);
+      if (idx < 0) {
+        days.push({ date: op.date, stamps: [] });
+        idx = days.length - 1;
+      }
+      if (op.action === 'stamp') {
+        // Stempelung hinzufügen wenn noch nicht drin (Server hat sie ggf. schon)
+        if (!days[idx].stamps.includes(op.time)) {
+          days[idx].stamps.push(op.time);
+          days[idx].stamps.sort();
+        }
+      } else if (op.action === 'replace') {
+        // Ganzen Tag ersetzen
+        days[idx].stamps = op.stamps.slice();
+      }
+    }
+    return days;
+  }
+
   async function syncFromSheet() {
     setSyncStatus('syncing', 'Sync…');
     try {
       const res  = await fetch(`${SCRIPT_URL}?action=all`);
       const data = await res.json();
       const today = todayStr();
-      allDays = data.days || [];
+      // Server-Daten holen UND pending lokale Änderungen darauf anwenden
+      allDays = applyPendingOps(data.days || []);
       let idx = allDays.findIndex(d => d.date === today);
       if (idx < 0) { allDays.push({ date: today, stamps: [] }); idx = allDays.length - 1; }
-      // Cache aktualisieren
+      // Cache aktualisieren (mit pending drin → bleibt auch nach Reload erhalten)
       saveCacheDays(allDays);
       saveCacheToday(allDays[idx].stamps);
-      // Nur heute neu rendern wenn gerade auf heute
-      if (currentIdx === idx || currentIdx === -1) {
+      // Aktuell angezeigten Tag neu rendern (egal welcher Tag, da Pending sich auch auf andere Tage beziehen kann)
+      if (currentIdx >= 0 && allDays[currentIdx]) {
+        // Den Index zum aktuellen Datum neu suchen (Reihenfolge kann sich geändert haben)
+        const curDate = allDays[currentIdx].date;
+        const newIdx = allDays.findIndex(d => d.date === curDate);
+        if (newIdx >= 0) {
+          currentIdx = newIdx;
+          stamps = allDays[currentIdx].stamps;
+        }
+      } else {
         currentIdx = idx;
         stamps = allDays[currentIdx].stamps;
-        renderList();
       }
-      setSyncStatus('ok', 'Synchronisiert');
+      renderList();
+      setSyncStatus('ok', pendingOps.length > 0 ? `Sync (${pendingOps.length} offen)` : 'Synchronisiert');
       checkWarn();
     } catch(e) {
       setSyncStatus('err', 'Offline');
@@ -842,7 +900,7 @@
     saveCacheDays(allDays);
     renderList();
     flashScreen();
-    setSyncStatus('ok', 'Gespeichert');
+    setSyncStatus('syncing', 'Speichern…');
     sendStamp(timeStr);
   }
 
@@ -858,32 +916,44 @@
 
   // ── Send / Save ──
   async function sendStamp(timeStr) {
+    const today = todayStr();
+    // Pending: solange Server nicht bestätigt hat, gilt diese Stempelung als "in-flight"
+    const pid = addPending({ action: 'stamp', date: today, time: timeStr });
     try {
       await fetch(SCRIPT_URL, {
         method: 'POST',
         body: JSON.stringify({ time: timeStr }),
         headers: { 'Content-Type': 'text/plain' }
       });
+      // Server hat bestätigt → Pending entfernen
+      removePending(pid);
+      // Status nur dann updaten, wenn keine weiteren Ops mehr laufen
+      if (pendingOps.length === 0) setSyncStatus('ok', 'Gespeichert');
     } catch(e) {
-      // Offline: in Queue
+      // Offline: Pending bleibt drin (überlebt Reload), zusätzlich in Queue für flushQueue
       const q = loadQueue();
       q.push({ action: 'stamp', time: timeStr });
       saveQueue(q);
+      removePending(pid);  // Queue übernimmt jetzt
       showToast('Offline – wird beim nächsten Start sync\'t');
     }
   }
 
   async function reSaveDay(dateStr, stampsArr) {
+    const pid = addPending({ action: 'replace', date: dateStr, stamps: stampsArr.slice() });
     try {
       await fetch(SCRIPT_URL, {
         method: 'POST',
         body: JSON.stringify({ time: '__REPLACE__', date: dateStr, stamps: stampsArr.join(';') }),
         headers: { 'Content-Type': 'text/plain' }
       });
+      removePending(pid);
+      if (pendingOps.length === 0) setSyncStatus('ok', 'Gespeichert');
     } catch(e) {
       const q = loadQueue();
       q.push({ action: 'replace', date: dateStr, stamps: stampsArr.join(';') });
       saveQueue(q);
+      removePending(pid);
     }
   }
 
@@ -899,7 +969,7 @@
     if (dateStr === todayStr()) saveCacheToday(stamps);
     saveCacheDays(allDays);
     renderList();
-    setSyncStatus('ok', 'Gespeichert');
+    setSyncStatus('syncing', 'Speichern…');
     await reSaveDay(dateStr, stamps);
   });
 
@@ -926,7 +996,7 @@
     saveCacheDays(allDays);
     renderList();
     flashScreen();
-    setSyncStatus('ok', 'Gespeichert');
+    setSyncStatus('syncing', 'Speichern…');
     reSaveDay(dateStr, stamps);
   });
 
@@ -942,7 +1012,7 @@
   // ── Service Worker ──
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', function() {
-      navigator.serviceWorker.register('./sw.js?v=2.2').then(function(reg) {
+      navigator.serviceWorker.register('./sw.js?v=2.3').then(function(reg) {
         reg.update();
         reg.addEventListener('updatefound', function() {
           var nw = reg.installing;
