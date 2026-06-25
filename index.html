@@ -504,7 +504,7 @@
 </div>
 
 <script>
-  const APP_VERSION = '2.3';
+  const APP_VERSION = '2.4';
 
   const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxUlX7V70TlrbLqLX1f2zd_BMMckO7_meiAMdD152k4ztzxNFPOD2ilfE9tDBgeGdqT/exec";
   const LS_TODAY   = 'e3_today';    // { date, stamps }
@@ -780,6 +780,22 @@
     setInterval(syncFromSheet, 5 * 60 * 1000);
   }
 
+  // Wirft Pending-Ops weg, die der Server bereits widerspiegelt (z.B. POST war
+  // erfolgreich, aber App wurde vor removePending() geschlossen → Zombie-Op).
+  function reconcilePending(serverDays) {
+    if (pendingOps.length === 0) return;
+    for (const op of pendingOps.slice()) {
+      const sd = serverDays.find(d => d.date === op.date);
+      if (op.action === 'stamp') {
+        if (sd && sd.stamps.includes(op.time)) removePending(op.id);
+      } else if (op.action === 'replace') {
+        if (sd && sd.stamps.slice().sort().join(';') === op.stamps.slice().sort().join(';')) {
+          removePending(op.id);
+        }
+      }
+    }
+  }
+
   // Wendet alle pendingOps auf das frisch vom Server geholte allDays an.
   // So gehen lokale Änderungen, die noch nicht bestätigt wurden, nicht verloren.
   function applyPendingOps(serverDays) {
@@ -812,6 +828,7 @@
       const data = await res.json();
       const today = todayStr();
       // Server-Daten holen UND pending lokale Änderungen darauf anwenden
+      reconcilePending(data.days || []);   // Zombies wegräumen, BEVOR gemerged wird
       allDays = applyPendingOps(data.days || []);
       let idx = allDays.findIndex(d => d.date === today);
       if (idx < 0) { allDays.push({ date: today, stamps: [] }); idx = allDays.length - 1; }
@@ -1012,7 +1029,7 @@
   // ── Service Worker ──
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', function() {
-      navigator.serviceWorker.register('./sw.js?v=2.3').then(function(reg) {
+      navigator.serviceWorker.register('./sw.js?v=2.4').then(function(reg) {
         reg.update();
         reg.addEventListener('updatefound', function() {
           var nw = reg.installing;
